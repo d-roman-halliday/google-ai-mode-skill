@@ -52,3 +52,12 @@ EXTRA_HTTP_HEADERS = {
 # Timeouts
 PAGE_LOAD_TIMEOUT = 45000  # 45 seconds
 AI_RESPONSE_TIMEOUT = 30    # 30 seconds
+
+# Overall deadline for the "waiting for AI completion" loop (seconds).
+# After this, the scraper proceeds with whatever content has loaded.
+AI_COMPLETION_OVERALL_TIMEOUT = 40  # 40 seconds
+
+# When a CAPTCHA is detected in visible (--show-browser) mode the user has to
+# solve it by hand, which can be slow. Give them a much longer overall deadline
+# so the AI-completion loop doesn't time out mid-solve.
+CAPTCHA_SOLVE_TIMEOUT = 300  # 5 minutes
