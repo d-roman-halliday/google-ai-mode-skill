@@ -33,7 +33,10 @@ from bs4 import BeautifulSoup
 
 # Local imports
 from browser_utils import BrowserFactory
-from config import USER_AGENT, PAGE_LOAD_TIMEOUT, AI_RESPONSE_TIMEOUT, RESULTS_DIR, BROWSER_PROFILE_DIR
+from config import (
+    USER_AGENT, PAGE_LOAD_TIMEOUT, AI_RESPONSE_TIMEOUT, RESULTS_DIR, BROWSER_PROFILE_DIR,
+    AI_COMPLETION_OVERALL_TIMEOUT, CAPTCHA_SOLVE_TIMEOUT,
+)
 from logger import get_logger
 
 try:
@@ -526,7 +529,9 @@ class GoogleAIScraper:
         # CAPTCHA CHECK (nach page load)
         print(f"  🔍 Checking for CAPTCHA...")
         self.logger.debug("Checking for CAPTCHA...")
+        captcha_detected = False
         if detect_captcha(self.page):
+            captcha_detected = True
             self.logger.warning("CAPTCHA detected")
             if self.headless:
                 # Headless mode: Error zurückgeben
@@ -571,8 +576,13 @@ class GoogleAIScraper:
         self.logger.debug("Starting hybrid completion detection...")
         ai_ready = False
 
-        # OVERALL TIMEOUT: 40 seconds total, then proceed anyway
-        overall_deadline = time.time() + 40
+        # OVERALL TIMEOUT: proceed anyway once the deadline passes.
+        # A detected CAPTCHA needs manual solving, so allow much longer.
+        overall_timeout = CAPTCHA_SOLVE_TIMEOUT if captcha_detected else AI_COMPLETION_OVERALL_TIMEOUT
+        if captcha_detected:
+            print(f"  ⏳ CAPTCHA in progress - waiting up to {overall_timeout}s for you to solve it...")
+            self.logger.info(f"CAPTCHA detected - extending completion deadline to {overall_timeout}s")
+        overall_deadline = time.time() + overall_timeout
 
         # PRIMARY: Button-based detection (DUAL METHOD - ultra-robust!)
         # Method 1: SVG-based detection (100% reliable, language-independent!)
@@ -631,12 +641,12 @@ class GoogleAIScraper:
                                     }
                             time.sleep(1)
 
-        # FINAL TIMEOUT FALLBACK: After 40 seconds, proceed with whatever is loaded
+        # FINAL TIMEOUT FALLBACK: After the deadline, proceed with whatever is loaded
         if not ai_ready:
-            elapsed = int(time.time() - (overall_deadline - 40))
-            if elapsed >= 40:
-                self.logger.warning(f"⏱️  40s timeout reached - proceeding with loaded content")
-                print(f"  ⏱️  Timeout (40s) - scraping loaded content")
+            elapsed = int(time.time() - (overall_deadline - overall_timeout))
+            if elapsed >= overall_timeout:
+                self.logger.warning(f"⏱️  {overall_timeout}s timeout reached - proceeding with loaded content")
+                print(f"  ⏱️  Timeout ({overall_timeout}s) - scraping loaded content")
                 ai_ready = True  # Proceed anyway
             else:
                 self.logger.warning("AI completion not detected (proceeding anyway)")
